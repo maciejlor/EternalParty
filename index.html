@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <!-- Eclipse Paho MQTT client for global real-time synchronization -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
 </head>
 <body>
     <!-- Background Wrapper -->
@@ -159,10 +161,15 @@
                 <div id="admin-controls-panel" class="hidden">
                     <div class="admin-panel-title">⭐ STREAM CONTROL PANEL</div>
                     <div class="admin-panel-actions">
-                        <label class="btn btn-secondary file-upload-btn">
-                            📁 Choose Screenshare Video File
+                        <label class="btn btn-secondary file-upload-btn" style="padding: 6px 12px; font-size: 0.85rem;">
+                            📁 Choose Local File
                             <input type="file" id="admin-video-file" accept="video/*">
                         </label>
+                        <div class="admin-url-setter" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); vertical-align: middle;">
+                            <span style="font-size: 0.8rem; color: #ccc;">🔗 Video URL:</span>
+                            <input type="text" id="admin-video-url-input" placeholder="Paste direct MP4 link..." style="background: #000; border: 1px solid #333; color: #fff; border-radius: 4px; padding: 4px 6px; font-size: 0.85rem; width: 140px;">
+                            <button id="admin-btn-set-url" class="btn btn-primary" style="padding: 4px 10px; font-size: 0.8rem; height: auto; min-height: 0;">Load</button>
+                        </div>
                         <button id="admin-btn-play" class="btn btn-primary" disabled>▶ Play</button>
                         <button id="admin-btn-pause" class="btn btn-secondary" disabled>⏸ Pause</button>
                         <button id="admin-btn-stop" class="btn btn-danger" disabled>⏹ Stop Stream</button>

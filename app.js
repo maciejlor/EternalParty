@@ -64,6 +64,70 @@ try {
     console.warn("BroadcastChannel not supported in this browser. Multi-tab sync disabled.");
 }
 
+// Eclipse Paho MQTT configuration for global cloud real-time synchronization
+let mqttClient = null;
+let mqttConnected = false;
+const MQTT_BROKER = "broker.emqx.io";
+const MQTT_PORT = 8084;
+const MQTT_TOPIC = "eternal_party_event_maciejlor_sync";
+
+function initMQTT() {
+    if (typeof Paho === 'undefined') {
+        console.warn("Paho MQTT library not loaded. Global real-time sync disabled.");
+        return;
+    }
+    
+    const clientId = "client_" + Math.random().toString(36).substring(2, 9);
+    mqttClient = new Paho.MQTT.Client(MQTT_BROKER, MQTT_PORT, "/mqtt", clientId);
+    
+    mqttClient.onConnectionLost = (responseObject) => {
+        mqttConnected = false;
+        if (responseObject.errorCode !== 0) {
+            console.warn("MQTT Connection lost. Reconnecting in 3 seconds...", responseObject.errorMessage);
+            setTimeout(connectMQTT, 3000);
+        }
+    };
+    
+    mqttClient.onMessageArrived = (message) => {
+        try {
+            const msg = JSON.parse(message.payloadString);
+            
+            // Ignore messages sent by ourselves
+            if (msg.senderTabId === getTabId()) return;
+            
+            console.log("Global MQTT Sync message received:", msg.type, msg);
+            handleSyncMessage(msg);
+        } catch (e) {
+            console.warn("Failed to parse incoming MQTT message:", e);
+        }
+    };
+    
+    connectMQTT();
+}
+
+function connectMQTT() {
+    if (!mqttClient) return;
+    
+    mqttClient.connect({
+        useSSL: true,
+        timeout: 10,
+        onSuccess: () => {
+            mqttConnected = true;
+            console.log("Connected to EMQX Global MQTT Broker over WebSockets!");
+            try {
+                mqttClient.subscribe(MQTT_TOPIC);
+            } catch(e) {
+                console.warn("MQTT subscribe failed:", e);
+            }
+        },
+        onFailure: (err) => {
+            mqttConnected = false;
+            console.warn("MQTT Connection failed. Retrying in 5 seconds...", err);
+            setTimeout(connectMQTT, 5000);
+        }
+    });
+}
+
 // DOM Elements Cache
 const el = {
     bg: document.getElementById('app-background'),
@@ -102,6 +166,8 @@ const el = {
     btnConclude: document.getElementById('admin-btn-conclude'),
     adminTimeInput: document.getElementById('admin-time-input'),
     btnSetTime: document.getElementById('admin-btn-set-time'),
+    adminVideoUrlInput: document.getElementById('admin-video-url-input'),
+    btnSetUrl: document.getElementById('admin-btn-set-url'),
     videoStatus: document.getElementById('admin-video-status'),
     viewersCountText: document.getElementById('viewers-count'),
     skyStars: document.getElementById('sky-stars'),
@@ -136,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initIndexedDB();
     setupStars();
+    initMQTT(); // Initialize global real-time synchronization
     
     // Check if event has concluded
     if (sessionStorage.getItem('event_concluded') === 'true') {
@@ -505,6 +572,17 @@ function initEventListeners() {
     // Admin Playback: Video Upload
     el.videoFileInput.addEventListener('change', handleAdminVideoUpload);
     
+    el.btnSetUrl.addEventListener('click', () => {
+        if (!state.isAdmin) return;
+        handleAdminVideoUrlLoad();
+    });
+    el.adminVideoUrlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAdminVideoUrlLoad();
+        }
+    });
+    
     // Admin Playback: Controls
     el.btnPlay.addEventListener('click', () => {
         if (!state.isAdmin) return;
@@ -741,6 +819,38 @@ function handleAdminVideoUpload(e) {
         showToast(`Stream source active: ${file.name}`, "success");
     };
     reader.readAsArrayBuffer(file);
+}
+
+function handleAdminVideoUrlLoad() {
+    const url = el.adminVideoUrlInput.value.trim();
+    if (!url) {
+        showToast("Please enter a valid video URL", "error");
+        return;
+    }
+    
+    el.videoStatus.textContent = "Loading stream URL...";
+    
+    // Set local player source
+    el.video.src = url;
+    el.video.load();
+    el.video.classList.remove('hidden');
+    el.defaultView.classList.add('hidden');
+    
+    state.videoLoaded = true;
+    
+    // Enable admin controls
+    el.btnPlay.disabled = false;
+    el.btnPause.disabled = false;
+    el.btnStop.disabled = false;
+    el.videoStatus.textContent = "URL stream active. Ready to play.";
+    
+    // Broadcast the stream URL to all guests globally
+    broadcastMessage({
+        type: 'video_loaded_url',
+        url: url
+    });
+    
+    showToast("Stream URL broadcasted successfully!", "success");
 }
 
 function stopStream() {
@@ -1038,6 +1148,17 @@ function broadcastMessage(payload) {
             ...fullPayload
         }));
     } catch(e) {}
+    
+    // 3. Broadcast globally to all computers over the internet via MQTT!
+    if (mqttClient && mqttConnected) {
+        try {
+            const message = new Paho.MQTT.Message(JSON.stringify(fullPayload));
+            message.destinationName = MQTT_TOPIC;
+            mqttClient.send(message);
+        } catch(e) {
+            console.warn("Failed to send MQTT message:", e);
+        }
+    }
 }
 
 function handleSyncMessage(msg) {
@@ -1069,6 +1190,14 @@ function handleSyncMessage(msg) {
             
         case 'video_loaded':
             checkStoredVideo();
+            break;
+            
+        case 'video_loaded_url':
+            el.video.src = msg.url;
+            el.video.load();
+            el.video.classList.remove('hidden');
+            el.defaultView.classList.add('hidden');
+            state.videoLoaded = true;
             break;
             
         case 'video_stopped':
