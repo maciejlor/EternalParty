@@ -181,6 +181,11 @@ window.onYouTubeIframeAPIReady = function() {
     firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 })();
 
+// WebRTC configurations for real-time Peer-to-Peer local file streaming
+const peerId = "peer_" + Math.random().toString(36).substring(2, 9);
+const peerConnections = {}; // guestPeerId -> RTCPeerConnection
+let localWebRTCStream = null;
+
 // DOM Elements Cache
 const el = {
     bg: document.getElementById('app-background'),
@@ -222,8 +227,6 @@ const el = {
     adminVideoUrlInput: document.getElementById('admin-video-url-input'),
     btnSetUrl: document.getElementById('admin-btn-set-url'),
     videoStatus: document.getElementById('admin-video-status'),
-    guestFilePrompt: document.getElementById('guest-file-prompt'),
-    guestFilePicker: document.getElementById('guest-video-file-picker'),
     viewersCountText: document.getElementById('viewers-count'),
     skyStars: document.getElementById('sky-stars'),
     syncDot: document.getElementById('sync-status-dot'),
@@ -495,10 +498,7 @@ function clearVideoFromDB() {
 }
 
 function checkStoredVideo() {
-    if (!db || !indexedDBSupported) {
-        showGuestFilePromptIfNeeded();
-        return;
-    }
+    if (!db || !indexedDBSupported) return;
     try {
         const transaction = db.transaction([INDEXEDDB_STORE], "readonly");
         const store = transaction.objectStore(INDEXEDDB_STORE);
@@ -507,27 +507,10 @@ function checkStoredVideo() {
         request.onsuccess = () => {
             if (request.result) {
                 loadVideoSrc(request.result);
-                if (el.guestFilePrompt) el.guestFilePrompt.classList.add('hidden');
-            } else {
-                showGuestFilePromptIfNeeded();
             }
-        };
-        request.onerror = () => {
-            showGuestFilePromptIfNeeded();
         };
     } catch (err) {
         console.warn("Failed to check stored video:", err);
-        showGuestFilePromptIfNeeded();
-    }
-}
-
-function showGuestFilePromptIfNeeded() {
-    if (!state.videoLoaded && !state.isAdmin) {
-        if (el.guestFilePrompt) el.guestFilePrompt.classList.remove('hidden');
-        el.defaultView.classList.remove('hidden');
-        el.video.classList.add('hidden');
-        const ytContainer = document.getElementById('youtube-player');
-        if (ytContainer) ytContainer.classList.add('hidden');
     }
 }
 
@@ -648,20 +631,6 @@ function initEventListeners() {
     
     // Admin Playback: Video Upload
     el.videoFileInput.addEventListener('change', handleAdminVideoUpload);
-    
-    // Guest Playback: Local File Upload Sync Prompt
-    el.guestFilePicker.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        // Load selected local file
-        setVideoSource(file);
-        
-        // Hide prompt
-        el.guestFilePrompt.classList.add('hidden');
-        
-        showToast(`Local file loaded successfully! Syncing with host...`, "success");
-    });
     
     el.btnSetUrl.addEventListener('click', () => {
         if (!state.isAdmin) return;
@@ -896,9 +865,8 @@ function handleAdminVideoUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    el.videoStatus.textContent = "Uploading video locally...";
+    el.videoStatus.textContent = "Loading local file...";
     
-    // Save file as Blob into IndexedDB
     const reader = new FileReader();
     reader.onload = (event) => {
         const arrayBuffer = event.target.result;
@@ -908,11 +876,20 @@ function handleAdminVideoUpload(e) {
         saveVideoToDB(blob);
         
         // Load into local player
-        loadVideoSrc(blob);
+        setVideoSource(blob);
         
-        // Notify other tabs to retrieve the video from IndexedDB and play
+        // Initialize local WebRTC stream capture
+        try {
+            localWebRTCStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null);
+            console.log("Captured local video stream for WebRTC:", localWebRTCStream);
+        } catch(err) {
+            console.warn("captureStream failed:", err);
+        }
+        
+        // Broadcast WebRTC source loaded event to all guests
         broadcastMessage({
-            type: 'video_loaded'
+            type: 'video_loaded_webrtc',
+            hostPeerId: peerId
         });
         
         showToast(`Stream source active: ${file.name}`, "success");
@@ -942,6 +919,11 @@ function handleAdminVideoUrlLoad() {
 }
 
 function setVideoSource(urlOrFile) {
+    // Clear any previous WebRTC stream
+    if (el.video.srcObject) {
+        el.video.srcObject = null;
+    }
+
     const isUrl = (typeof urlOrFile === 'string');
     const ytId = isUrl ? getYouTubeId(urlOrFile) : null;
     
@@ -1065,6 +1047,25 @@ function seekVideoTo(time) {
 }
 
 function stopStream() {
+    // Clear WebRTC connections and tracks
+    if (localWebRTCStream) {
+        try {
+            localWebRTCStream.getTracks().forEach(track => track.stop());
+        } catch(e) {}
+        localWebRTCStream = null;
+    }
+    
+    for (const key in peerConnections) {
+        try {
+            peerConnections[key].close();
+        } catch(e) {}
+        delete peerConnections[key];
+    }
+    
+    if (el.video.srcObject) {
+        el.video.srcObject = null;
+    }
+
     // Clear video players
     if (activePlayerType === 'youtube') {
         if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
@@ -1103,22 +1104,145 @@ function stopStream() {
     showToast("Stream ended.", "error");
 }
 
-// Broadcasts playback time & playing status
 function sendSyncSignal() {
     if (!state.isAdmin || !state.videoLoaded) return;
     
     // Determine if it is a local blob URL or an internet URL
-    const isBlob = activePlayerType === 'html5' && el.video.src.startsWith('blob:');
+    const isBlob = activePlayerType === 'html5' && el.video.src && el.video.src.startsWith('blob:');
     const currentSrc = activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.getVideoUrl === 'function' 
         ? ytPlayer.getVideoUrl() 
         : el.video.src;
     
     broadcastMessage({
         type: 'video_sync',
-        url: isBlob ? null : currentSrc, // Do not send local blob URLs over the internet
+        url: isBlob ? null : currentSrc,
+        hostPeerId: isBlob ? peerId : null, // Send peerId so late guests can connect!
         playing: isVideoPlaying(),
         currentTime: getVideoCurrentTime()
     });
+}
+
+// WebRTC signal helpers
+async function initiateWebRTCOffer(guestPeerId) {
+    console.log(`Initiating WebRTC offer to guest ${guestPeerId}...`);
+    try {
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        peerConnections[guestPeerId] = pc;
+        
+        // Add local stream tracks
+        if (localWebRTCStream) {
+            localWebRTCStream.getTracks().forEach(track => {
+                pc.addTrack(track, localWebRTCStream);
+            });
+        }
+        
+        // ICE Candidate handler
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                broadcastMessage({
+                    type: 'webrtc_ice',
+                    candidate: event.candidate,
+                    targetPeerId: guestPeerId,
+                    senderPeerId: peerId
+                });
+            }
+        };
+        
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        broadcastMessage({
+            type: 'webrtc_offer',
+            offer: offer,
+            targetPeerId: guestPeerId,
+            senderPeerId: peerId
+        });
+    } catch(err) {
+        console.warn("Failed to initiate WebRTC offer:", err);
+    }
+}
+
+async function handleWebRTCOffer(offer, senderPeerId) {
+    console.log(`Received WebRTC offer from host ${senderPeerId}...`);
+    try {
+        if (peerConnections[senderPeerId]) {
+            peerConnections[senderPeerId].close();
+        }
+        
+        const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        });
+        peerConnections[senderPeerId] = pc;
+        
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                broadcastMessage({
+                    type: 'webrtc_ice',
+                    candidate: event.candidate,
+                    targetPeerId: senderPeerId,
+                    senderPeerId: peerId
+                });
+            }
+        };
+        
+        pc.ontrack = (event) => {
+            console.log("WebRTC stream track received!");
+            activePlayerType = 'webrtc';
+            el.video.srcObject = event.streams[0];
+            el.video.muted = false; // Play audio too!
+            el.video.classList.remove('hidden');
+            el.defaultView.classList.add('hidden');
+            
+            state.videoLoaded = true;
+            
+            el.video.play().catch(e => {
+                console.warn("Autoplay blocked for WebRTC track. Waiting for user interaction...", e);
+                const playOnInteract = () => {
+                    el.video.play();
+                    document.removeEventListener('click', playOnInteract);
+                };
+                document.addEventListener('click', playOnInteract);
+            });
+        };
+        
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        
+        broadcastMessage({
+            type: 'webrtc_answer',
+            answer: answer,
+            targetPeerId: senderPeerId,
+            senderPeerId: peerId
+        });
+    } catch(err) {
+        console.warn("Failed to handle WebRTC offer:", err);
+    }
+}
+
+async function handleWebRTCAnswer(answer, senderPeerId) {
+    console.log(`Received WebRTC answer from guest ${senderPeerId}...`);
+    try {
+        const pc = peerConnections[senderPeerId];
+        if (pc) {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+    } catch(err) {
+        console.warn("Failed to set WebRTC answer:", err);
+    }
+}
+
+async function handleWebRTCIce(candidate, senderPeerId) {
+    try {
+        const pc = peerConnections[senderPeerId];
+        if (pc) {
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+    } catch(err) {
+        console.warn("Failed to add ICE candidate:", err);
+    }
 }
 
 // Periodically send sync signal (every 3 seconds) when admin is streaming
@@ -1426,6 +1550,36 @@ function handleSyncMessage(msg) {
             checkStoredVideo();
             break;
             
+        case 'video_loaded_webrtc':
+            if (state.isAdmin) return;
+            console.log("Host loaded WebRTC stream. Requesting WebRTC connection...");
+            broadcastMessage({
+                type: 'webrtc_request_connection',
+                guestPeerId: peerId,
+                hostPeerId: msg.hostPeerId
+            });
+            break;
+
+        case 'webrtc_request_connection':
+            if (!state.isAdmin || !localWebRTCStream) return;
+            initiateWebRTCOffer(msg.guestPeerId);
+            break;
+            
+        case 'webrtc_offer':
+            if (state.isAdmin || msg.targetPeerId !== peerId) return;
+            handleWebRTCOffer(msg.offer, msg.senderPeerId);
+            break;
+            
+        case 'webrtc_answer':
+            if (!state.isAdmin || msg.targetPeerId !== peerId) return;
+            handleWebRTCAnswer(msg.answer, msg.senderPeerId);
+            break;
+            
+        case 'webrtc_ice':
+            if (msg.targetPeerId !== peerId) return;
+            handleWebRTCIce(msg.candidate, msg.senderPeerId);
+            break;
+            
         case 'video_loaded_url':
             setVideoSource(msg.url);
             break;
@@ -1443,7 +1597,9 @@ function handleSyncMessage(msg) {
                 el.video.load();
                 el.video.classList.add('hidden');
             }
-            if (el.guestFilePrompt) el.guestFilePrompt.classList.add('hidden');
+            if (el.video.srcObject) {
+                el.video.srcObject = null;
+            }
             el.defaultView.classList.remove('hidden');
             state.videoLoaded = false;
             state.isPlaying = false;
@@ -1453,20 +1609,28 @@ function handleSyncMessage(msg) {
         case 'video_sync':
             if (state.isAdmin) return;
             
+            // WebRTC direct live stream sync
+            if (msg.hostPeerId) {
+                if (activePlayerType !== 'webrtc') {
+                    console.log("Late joiner detected active WebRTC stream. Requesting connection...");
+                    broadcastMessage({
+                        type: 'webrtc_request_connection',
+                        guestPeerId: peerId,
+                        hostPeerId: msg.hostPeerId
+                    });
+                }
+                return; // P2P WebRTC handles its own playback natively, skip sync calculations
+            }
+            
             // If the sync message has a video URL and it's not loaded locally, load it!
             if (msg.url) {
                 if (!state.videoLoaded || (activePlayerType === 'html5' && el.video.src !== msg.url) || (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.getVideoUrl === 'function' && ytPlayer.getVideoUrl() !== msg.url)) {
                     setVideoSource(msg.url);
                 }
-            } else {
-                // If msg.url is null (local file sync) and we don't have it loaded, show the selector prompt
-                if (!state.videoLoaded) {
-                    if (el.guestFilePrompt) el.guestFilePrompt.classList.remove('hidden');
-                    return;
-                }
             }
             
             if (!state.videoLoaded) return;
+            if (activePlayerType === 'webrtc') return; // Skip logic for WebRTC
             
             const localPlaying = isVideoPlaying();
             if (msg.playing && !localPlaying) {
