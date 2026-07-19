@@ -461,6 +461,11 @@ function initEventListeners() {
         const newTarget = new Date();
         newTarget.setUTCHours(hours, minutes, 0, 0);
         
+        // If the target time has already passed today, roll it over to tomorrow!
+        if (newTarget.getTime() - Date.now() <= 0) {
+            newTarget.setUTCDate(newTarget.getUTCDate() + 1);
+        }
+        
         // Save target time as a timestamp in localStorage so it persists across refreshes
         localStorage.setItem('countdown_target_timestamp', newTarget.getTime());
         
@@ -1021,6 +1026,24 @@ function handleSyncMessage(msg) {
             
         case 'update_countdown':
             localStorage.setItem('countdown_target_timestamp', msg.timestamp);
+            
+            // If the countdown is now set to the future, reset concluded state and return guest to countdown page
+            const updatedDiff = Number(msg.timestamp) - Date.now();
+            if (updatedDiff > 0) {
+                sessionStorage.removeItem('event_concluded');
+                
+                // Hide concluded card, show main countdown card
+                const mainCountdown = document.getElementById('main-countdown-card');
+                const concludeCard = document.getElementById('conclude-card');
+                if (mainCountdown) mainCountdown.classList.remove('hidden');
+                if (concludeCard) concludeCard.classList.add('hidden');
+                
+                // Return to countdown page if currently on username page
+                if (state.activeScreen === 'username') {
+                    transitionToScreen('countdown');
+                }
+            }
+            
             initCountdown();
             break;
     }
