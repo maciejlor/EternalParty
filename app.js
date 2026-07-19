@@ -251,15 +251,28 @@ let countdownInterval;
 function getCountdownTarget() {
     const savedTimestamp = localStorage.getItem('countdown_target_timestamp');
     if (savedTimestamp) {
-        return new Date(Number(savedTimestamp));
+        const ts = Number(savedTimestamp);
+        // Only use the saved target time if it is in the future!
+        if (ts > Date.now()) {
+            return new Date(ts);
+        }
     }
     const defaultTarget = new Date();
-    defaultTarget.setUTCHours(19, 0, 0, 0);
+    defaultTarget.setUTCHours(19, 45, 0, 0);
     return defaultTarget;
 }
 
 function initCountdown() {
     clearInterval(countdownInterval);
+    
+    // Update target description text dynamically
+    const target = getCountdownTarget();
+    const displayEl = document.getElementById('countdown-target-display');
+    if (displayEl) {
+        const hh = String(target.getUTCHours()).padStart(2, '0');
+        const mm = String(target.getUTCMinutes()).padStart(2, '0');
+        displayEl.textContent = `${hh}:${mm}`;
+    }
     
     function updateTimer() {
         const target = getCountdownTarget();
