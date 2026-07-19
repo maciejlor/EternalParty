@@ -867,34 +867,32 @@ function handleAdminVideoUpload(e) {
     
     el.videoStatus.textContent = "Loading local file...";
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        const arrayBuffer = event.target.result;
-        const blob = new Blob([arrayBuffer], { type: file.type });
-        
-        // Save to Database
-        saveVideoToDB(blob);
-        
-        // Load into local player
-        setVideoSource(blob);
-        
-        // Initialize local WebRTC stream capture
-        try {
-            localWebRTCStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null);
-            console.log("Captured local video stream for WebRTC:", localWebRTCStream);
-        } catch(err) {
-            console.warn("captureStream failed:", err);
-        }
-        
-        // Broadcast WebRTC source loaded event to all guests
-        broadcastMessage({
-            type: 'video_loaded_webrtc',
-            hostPeerId: peerId
-        });
-        
-        showToast(`Stream source active: ${file.name}`, "success");
-    };
-    reader.readAsArrayBuffer(file);
+    // Create instant local URL from the File object (0ms, no RAM overhead!)
+    const objectURL = URL.createObjectURL(file);
+    
+    // Save to Database (optional, only if supported, but skip large files to avoid memory crash)
+    if (file.size < 50 * 1024 * 1024) { // Only cache files under 50MB
+        saveVideoToDB(file);
+    }
+    
+    // Load into local player
+    setVideoSource(objectURL);
+    
+    // Initialize local WebRTC stream capture
+    try {
+        localWebRTCStream = el.video.captureStream ? el.video.captureStream() : (el.video.mozCaptureStream ? el.video.mozCaptureStream() : null);
+        console.log("Captured local video stream for WebRTC:", localWebRTCStream);
+    } catch(err) {
+        console.warn("captureStream failed:", err);
+    }
+    
+    // Broadcast WebRTC source loaded event to all guests
+    broadcastMessage({
+        type: 'video_loaded_webrtc',
+        hostPeerId: peerId
+    });
+    
+    showToast(`Stream source active: ${file.name}`, "success");
 }
 
 function handleAdminVideoUrlLoad() {
