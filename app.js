@@ -170,9 +170,9 @@ function setupStars() {
 let countdownInterval;
 
 function initCountdown() {
-    // Target: exactly 18:30 UTC today
+    // Target: exactly 19:00 UTC today
     const target = new Date();
-    target.setUTCHours(18, 30, 0, 0);
+    target.setUTCHours(19, 0, 0, 0);
     
     function updateTimer() {
         const now = new Date();
