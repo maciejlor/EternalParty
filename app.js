@@ -67,8 +67,11 @@ try {
 // Eclipse Paho MQTT configuration for global cloud real-time synchronization
 let mqttClient = null;
 let mqttConnected = false;
-const MQTT_BROKER = "broker.emqx.io";
-const MQTT_PORT = 8084;
+const MQTT_BROKERS = [
+    { host: "broker.emqx.io", port: 8084, path: "/mqtt" },
+    { host: "broker.hivemq.com", port: 8884, path: "/mqtt" }
+];
+let currentBrokerIndex = 0;
 const MQTT_TOPIC = "eternal_party_event_maciejlor_sync";
 
 function initMQTT() {
@@ -77,14 +80,24 @@ function initMQTT() {
         return;
     }
     
+    setupMQTTClient();
+}
+
+function setupMQTTClient() {
+    const broker = MQTT_BROKERS[currentBrokerIndex];
+    console.log(`Initializing MQTT client on ${broker.host}:${broker.port}${broker.path}...`);
+    
     const clientId = "client_" + Math.random().toString(36).substring(2, 9);
-    mqttClient = new Paho.MQTT.Client(MQTT_BROKER, MQTT_PORT, "/mqtt", clientId);
+    mqttClient = new Paho.MQTT.Client(broker.host, broker.port, broker.path, clientId);
     
     mqttClient.onConnectionLost = (responseObject) => {
         mqttConnected = false;
+        updateSyncStatus(false);
         if (responseObject.errorCode !== 0) {
-            console.warn("MQTT Connection lost. Reconnecting in 3 seconds...", responseObject.errorMessage);
-            setTimeout(connectMQTT, 3000);
+            console.warn("MQTT Connection lost. Switching broker and reconnecting in 3 seconds...", responseObject.errorMessage);
+            // Cycle broker on disconnect
+            currentBrokerIndex = (currentBrokerIndex + 1) % MQTT_BROKERS.length;
+            setTimeout(setupMQTTClient, 3000);
         }
     };
     
@@ -108,12 +121,14 @@ function initMQTT() {
 function connectMQTT() {
     if (!mqttClient) return;
     
+    const broker = MQTT_BROKERS[currentBrokerIndex];
     mqttClient.connect({
         useSSL: true,
         timeout: 10,
         onSuccess: () => {
             mqttConnected = true;
-            console.log("Connected to EMQX Global MQTT Broker over WebSockets!");
+            updateSyncStatus(true);
+            console.log(`Connected to global MQTT broker (${broker.host}) over WebSockets!`);
             try {
                 mqttClient.subscribe(MQTT_TOPIC);
             } catch(e) {
@@ -122,10 +137,29 @@ function connectMQTT() {
         },
         onFailure: (err) => {
             mqttConnected = false;
-            console.warn("MQTT Connection failed. Retrying in 5 seconds...", err);
-            setTimeout(connectMQTT, 5000);
+            updateSyncStatus(false);
+            console.warn(`MQTT Connection to ${broker.host} failed. Retrying with next broker in 5 seconds...`, err);
+            // Cycle broker on connect failure
+            currentBrokerIndex = (currentBrokerIndex + 1) % MQTT_BROKERS.length;
+            setTimeout(setupMQTTClient, 5000);
         }
     });
+}
+
+function updateSyncStatus(connected) {
+    if (el && el.syncDot && el.syncText) {
+        if (connected) {
+            el.syncDot.style.background = "#2ec4b6";
+            el.syncDot.style.boxShadow = "0 0 8px #2ec4b6";
+            el.syncText.textContent = "Synced";
+            el.syncText.style.color = "#fff";
+        } else {
+            el.syncDot.style.background = "#ff4d4d";
+            el.syncDot.style.boxShadow = "0 0 8px #ff4d4d";
+            el.syncText.textContent = "Offline (Reconnecting)";
+            el.syncText.style.color = "#ccc";
+        }
+    }
 }
 
 // DOM Elements Cache
@@ -171,6 +205,8 @@ const el = {
     videoStatus: document.getElementById('admin-video-status'),
     viewersCountText: document.getElementById('viewers-count'),
     skyStars: document.getElementById('sky-stars'),
+    syncDot: document.getElementById('sync-status-dot'),
+    syncText: document.getElementById('sync-status-text'),
     
     // Chat Sidebar
     chatMessages: document.getElementById('chat-messages'),
