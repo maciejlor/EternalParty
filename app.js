@@ -222,6 +222,8 @@ const el = {
     adminVideoUrlInput: document.getElementById('admin-video-url-input'),
     btnSetUrl: document.getElementById('admin-btn-set-url'),
     videoStatus: document.getElementById('admin-video-status'),
+    guestFilePrompt: document.getElementById('guest-file-prompt'),
+    guestFilePicker: document.getElementById('guest-video-file-picker'),
     viewersCountText: document.getElementById('viewers-count'),
     skyStars: document.getElementById('sky-stars'),
     syncDot: document.getElementById('sync-status-dot'),
@@ -493,7 +495,10 @@ function clearVideoFromDB() {
 }
 
 function checkStoredVideo() {
-    if (!db || !indexedDBSupported) return;
+    if (!db || !indexedDBSupported) {
+        showGuestFilePromptIfNeeded();
+        return;
+    }
     try {
         const transaction = db.transaction([INDEXEDDB_STORE], "readonly");
         const store = transaction.objectStore(INDEXEDDB_STORE);
@@ -502,10 +507,27 @@ function checkStoredVideo() {
         request.onsuccess = () => {
             if (request.result) {
                 loadVideoSrc(request.result);
+                if (el.guestFilePrompt) el.guestFilePrompt.classList.add('hidden');
+            } else {
+                showGuestFilePromptIfNeeded();
             }
+        };
+        request.onerror = () => {
+            showGuestFilePromptIfNeeded();
         };
     } catch (err) {
         console.warn("Failed to check stored video:", err);
+        showGuestFilePromptIfNeeded();
+    }
+}
+
+function showGuestFilePromptIfNeeded() {
+    if (!state.videoLoaded && !state.isAdmin) {
+        if (el.guestFilePrompt) el.guestFilePrompt.classList.remove('hidden');
+        el.defaultView.classList.remove('hidden');
+        el.video.classList.add('hidden');
+        const ytContainer = document.getElementById('youtube-player');
+        if (ytContainer) ytContainer.classList.add('hidden');
     }
 }
 
@@ -626,6 +648,20 @@ function initEventListeners() {
     
     // Admin Playback: Video Upload
     el.videoFileInput.addEventListener('change', handleAdminVideoUpload);
+    
+    // Guest Playback: Local File Upload Sync Prompt
+    el.guestFilePicker.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Load selected local file
+        setVideoSource(file);
+        
+        // Hide prompt
+        el.guestFilePrompt.classList.add('hidden');
+        
+        showToast(`Local file loaded successfully! Syncing with host...`, "success");
+    });
     
     el.btnSetUrl.addEventListener('click', () => {
         if (!state.isAdmin) return;
@@ -1407,6 +1443,7 @@ function handleSyncMessage(msg) {
                 el.video.load();
                 el.video.classList.add('hidden');
             }
+            if (el.guestFilePrompt) el.guestFilePrompt.classList.add('hidden');
             el.defaultView.classList.remove('hidden');
             state.videoLoaded = false;
             state.isPlaying = false;
@@ -1417,8 +1454,16 @@ function handleSyncMessage(msg) {
             if (state.isAdmin) return;
             
             // If the sync message has a video URL and it's not loaded locally, load it!
-            if (msg.url && (!state.videoLoaded || (activePlayerType === 'html5' && el.video.src !== msg.url) || (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.getVideoUrl === 'function' && ytPlayer.getVideoUrl() !== msg.url))) {
-                setVideoSource(msg.url);
+            if (msg.url) {
+                if (!state.videoLoaded || (activePlayerType === 'html5' && el.video.src !== msg.url) || (activePlayerType === 'youtube' && ytPlayer && typeof ytPlayer.getVideoUrl === 'function' && ytPlayer.getVideoUrl() !== msg.url)) {
+                    setVideoSource(msg.url);
+                }
+            } else {
+                // If msg.url is null (local file sync) and we don't have it loaded, show the selector prompt
+                if (!state.videoLoaded) {
+                    if (el.guestFilePrompt) el.guestFilePrompt.classList.remove('hidden');
+                    return;
+                }
             }
             
             if (!state.videoLoaded) return;
