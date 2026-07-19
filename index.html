@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Party | Live Stream</title>
+    <!-- Google Fonts: Outfit & Inter for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Wrapper -->
+    <div id="app-background" class="bg-blurred"></div>
+
+    <!-- Hidden Admin Entry Point -->
+    <button id="admin-trigger" aria-label="Admin Entrance" title="Admin Login">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+        </svg>
+    </button>
+
+    <!-- 1. Countdown Screen -->
+    <section id="countdown-screen" class="screen">
+
+        <div class="glass-card countdown-card" id="main-countdown-card">
+            <span class="badge neon-text">UPCOMING EVENT</span>
+            <h1 class="glow-text">THE PARTY AWAITS</h1>
+            <p class="subtitle">The countdown to today 18:30 UTC is underway. Get ready to join the stream!</p>
+            
+            <div class="countdown-timer">
+                <div class="timer-box">
+                    <span id="timer-hours">00</span>
+                    <span class="timer-label">HOURS</span>
+                </div>
+                <div class="timer-divider">:</div>
+                <div class="timer-box">
+                    <span id="timer-minutes">00</span>
+                    <span class="timer-label">MINUTES</span>
+                </div>
+                <div class="timer-divider">:</div>
+                <div class="timer-box">
+                    <span id="timer-seconds">00</span>
+                    <span class="timer-label">SECONDS</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conclude Card (visible when event is concluded) -->
+        <div id="conclude-card" class="glass-card hidden" style="max-width: 550px; text-align: center; border-color: #ff0055; box-shadow: 0 0 25px rgba(255, 0, 85, 0.25);">
+            <span class="badge" style="background: #ff0055; color: #fff;">EVENT CLOSED</span>
+            <h2 class="glow-text" style="margin-top: 15px; font-size: 2rem;">Thank you for attending the events!</h2>
+            <p style="font-size: 1.25rem; font-weight: 600; color: #ffffff; margin-top: 12px; letter-spacing: 0.02em;">We hope you like this!</p>
+        </div>
+    </section>
+
+    <!-- Admin Password Modal (overlay) -->
+    <div id="password-modal" class="modal-overlay hidden">
+        <div class="glass-card modal-card">
+            <h2>Admin Authentication</h2>
+            <p>Enter the security key to bypass the countdown and assume stream host controls.</p>
+            <div class="input-group">
+                <input type="password" id="admin-password-input" placeholder="Enter password..." autocomplete="off">
+                <span class="error-msg" id="password-error"></span>
+            </div>
+            <div class="modal-buttons">
+                <button id="btn-cancel-password" class="btn btn-secondary">Cancel</button>
+                <button id="btn-submit-password" class="btn btn-primary">Authenticate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Username Entry Screen -->
+    <section id="username-screen" class="screen hidden">
+        <div class="glass-card username-card">
+            <h2>Welcome Guest</h2>
+            <p>Enter a username to join the party room and chat live!</p>
+            
+            <div class="input-group">
+                <input type="text" id="username-input" placeholder="Enter your username..." maxlength="20" autocomplete="off">
+                <span class="error-msg" id="username-error"></span>
+            </div>
+
+            <button id="btn-enter-party" class="btn btn-primary btn-block">Join Live Party</button>
+        </div>
+    </section>
+
+    <!-- 3. Livestream Screen (Discord Screenshare Style) -->
+    <section id="stream-screen" class="screen hidden">
+        <div class="stream-layout">
+            <!-- Main Video/Stage Area -->
+            <div class="stream-main">
+
+                <!-- Stream Player / Sandbox -->
+                <div class="stream-video-container">
+                    <!-- Audio Context visualizer or glowing background when active -->
+                    <div id="video-overlay-glow"></div>
+                    
+                    <!-- Real Video Element (when admin uploads a video) -->
+                    <video id="stream-video" loop muted playsinline class="hidden"></video>
+                    
+                    <!-- Interactive 3D/CSS Roblox Werewolf Stage (Default View) -->
+                    <div id="stream-default-view">
+                        <!-- Grass Ground -->
+                        <div class="ground-grass"></div>
+                        <!-- Sky Background with Twinkling Stars -->
+                        <div class="sky-stars" id="sky-stars"></div>
+                        
+                        <!-- Werewolf Roblox Character Container -->
+                        <div class="werewolf-character">
+                            <!-- SVG werewolf avatar from back (matching screenshot) -->
+                            <svg viewBox="0 0 400 500" class="werewolf-svg">
+                                <!-- Shadow -->
+                                <ellipse cx="200" cy="460" rx="90" ry="15" fill="rgba(0,0,0,0.6)"></ellipse>
+                                
+                                <!-- Tail -->
+                                <path d="M 230 400 Q 290 320 280 250 Q 250 270 220 370 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="3"/>
+                                
+                                <!-- Left Leg -->
+                                <path d="M 140 370 L 150 450 L 125 460 L 120 440 L 128 370 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                
+                                <!-- Right Leg -->
+                                <path d="M 260 370 L 250 450 L 275 460 L 280 440 L 272 370 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                
+                                <!-- Massive Back Torso -->
+                                <path d="M 120 200 C 120 180, 280 180, 280 200 L 265 380 L 135 380 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                
+                                <!-- Muscle details on back -->
+                                <path d="M 170 210 Q 200 240 230 210" fill="none" stroke="#2b2d38" stroke-width="4" stroke-linecap="round"/>
+                                <path d="M 160 260 Q 200 300 240 260" fill="none" stroke="#2b2d38" stroke-width="4" stroke-linecap="round"/>
+                                <path d="M 175 315 Q 200 340 225 315" fill="none" stroke="#2b2d38" stroke-width="3" stroke-linecap="round"/>
+                                <line x1="200" y1="200" x2="200" y2="370" stroke="#2b2d38" stroke-width="3"/>
+                                
+                                <!-- Left Shoulder & Arm -->
+                                <path d="M 125 200 C 90 200, 70 250, 80 320 C 85 360, 105 380, 115 370 C 110 320, 115 260, 130 220 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                <!-- Right Shoulder & Arm -->
+                                <path d="M 275 200 C 310 200, 330 250, 320 320 C 315 360, 295 380, 285 370 C 290 320, 285 260, 270 220 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                
+                                <!-- Fluffy Collar / Neck fur -->
+                                <path d="M 140 180 C 140 160, 260 160, 260 180 C 240 190, 160 190, 140 180 Z" fill="#2c2e3b"/>
+                                
+                                <!-- Wolf Head (back view) -->
+                                <path d="M 160 180 C 160 130, 240 130, 240 180 Z" fill="#1b1c22" stroke="#2c2e3b" stroke-width="4"/>
+                                
+                                <!-- Left Ear -->
+                                <path d="M 165 140 L 155 70 Q 185 100 185 125 Z" fill="#15161b" stroke="#2c2e3b" stroke-width="3"/>
+                                <!-- Right Ear -->
+                                <path d="M 235 140 L 245 70 Q 215 100 215 125 Z" fill="#15161b" stroke="#2c2e3b" stroke-width="3"/>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Overlay for Speech Bubbles (Roblox Style) -->
+                    <div id="speech-bubbles-layer"></div>
+                </div>
+
+                <!-- Admin Dynamic Screen Controls (visible to admin only) -->
+                <div id="admin-controls-panel" class="hidden">
+                    <div class="admin-panel-title">⭐ STREAM CONTROL PANEL</div>
+                    <div class="admin-panel-actions">
+                        <label class="btn btn-secondary file-upload-btn">
+                            📁 Choose Screenshare Video File
+                            <input type="file" id="admin-video-file" accept="video/*">
+                        </label>
+                        <button id="admin-btn-play" class="btn btn-primary" disabled>▶ Play</button>
+                        <button id="admin-btn-pause" class="btn btn-secondary" disabled>⏸ Pause</button>
+                        <button id="admin-btn-stop" class="btn btn-danger" disabled>⏹ Stop Stream</button>
+                        <button id="admin-btn-troll" class="btn btn-accent">🤡 Troll Guests</button>
+                        <button id="admin-btn-conclude" class="btn btn-danger" style="background: #990000; border-color: #990000;">🛑 Conclude Event</button>
+                        <span id="admin-video-status">No video uploaded</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Sidebar Area -->
+            <div class="stream-sidebar">
+                <div class="chat-sidebar-header">
+                    <h3>STREAM CHAT</h3>
+                </div>
+                <div class="chat-messages-container" id="chat-messages-container">
+                    <div id="chat-messages">
+                        <!-- Chat messages inserted dynamically -->
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <form id="chat-form">
+                        <input type="text" id="chat-input" placeholder="Type a message (e.g. HYPEE)..." autocomplete="off" maxlength="100">
+                        <button type="submit" id="btn-send-chat" aria-label="Send Message">
+                            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 4. Announcement Overlay (Widescreen Scania Banner - redesigned to match user image) -->
+    <div id="announcement-banner" class="announcement-banner hidden">
+        <div class="announcement-content-side">
+            <span class="announcement-sender-name" id="announcement-sender">Macik</span>
+            <div id="announcement-body-text" class="announcement-original-text">ANNOUNCEMENT MESSAGE</div>
+            <div id="announcement-translated-text" class="announcement-translated-text">ANNOUNCEMENT MESSAGE TRANSLATED TURKISH</div>
+        </div>
+    </div>
+
+    <!-- Troll Face Overlay (Triggered by Q key or Troll Guests button) -->
+    <div id="troll-overlay" class="hidden">
+        <div class="troll-card">
+            <img src="TROLL.jpg" onerror="if(this.src.indexOf('troll.png') === -1) { this.src='troll.png'; } else { this.src='troll.PNG'; }" alt="Troll Face">
+        </div>
+    </div>
+
+    <!-- Admin Announcement Keyboard Prompt Modal -->
+    <div id="announcement-modal" class="modal-overlay hidden">
+        <div class="glass-card modal-card">
+            <h2>📢 Create Admin Announcement</h2>
+            <p>Type your announcement message to broadcast to all guest screens.</p>
+            <div class="input-group">
+                <input type="text" id="announcement-message-input" placeholder="e.g. GET HYPEE" maxlength="150" autocomplete="off">
+            </div>
+            <div class="modal-buttons">
+                <button id="btn-cancel-announcement" class="btn btn-secondary">Cancel</button>
+                <button id="btn-submit-announcement" class="btn btn-primary">Broadcast</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert system for simple errors/notifs -->
+    <div id="alert-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
