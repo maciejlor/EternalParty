@@ -25,6 +25,37 @@ const INDEXEDDB_NAME = "PartyStreamDB";
 const INDEXEDDB_STORE = "videoStore";
 const INDEXEDDB_KEY = "stream_video";
 
+// Global Cloud Sync configuration (for synchronising timer across phone/desktop/different browsers)
+const CLOUD_BUCKET = "d1a8e9b6-8f3a-4c28-98e3-85f7a5b3a6c1";
+const CLOUD_URL = `https://kvdb.io/${CLOUD_BUCKET}/party_target_time`;
+
+async function saveTargetTimeToCloud(timestamp) {
+    try {
+        await fetch(CLOUD_URL, {
+            method: 'POST',
+            body: String(timestamp)
+        });
+        console.log("Successfully saved target time to Cloud:", timestamp);
+    } catch(e) {
+        console.warn("Cloud sync write failed:", e);
+    }
+}
+
+async function loadTargetTimeFromCloud() {
+    try {
+        const res = await fetch(CLOUD_URL);
+        if (res.ok) {
+            const val = await res.text();
+            if (val && !isNaN(val)) {
+                return Number(val);
+            }
+        }
+    } catch(e) {
+        console.warn("Cloud sync read failed:", e);
+    }
+    return null;
+}
+
 // Broadcast Channel for Multi-tab communication
 let broadcastChannel;
 try {
@@ -137,6 +168,52 @@ document.addEventListener('DOMContentLoaded', () => {
             initCountdown();
         }
     }
+    
+    // Fetch target time from Cloud on startup (for multi-device sync)
+    loadTargetTimeFromCloud().then(cloudTime => {
+        if (cloudTime) {
+            const localTime = localStorage.getItem('countdown_target_timestamp');
+            if (Number(localTime) !== cloudTime) {
+                localStorage.setItem('countdown_target_timestamp', cloudTime);
+                
+                // If countdown is set to future, reset concluded state
+                const diff = cloudTime - Date.now();
+                if (diff > 0) {
+                    sessionStorage.removeItem('event_concluded');
+                    const mainCountdown = document.getElementById('main-countdown-card');
+                    const concludeCard = document.getElementById('conclude-card');
+                    if (mainCountdown) mainCountdown.classList.remove('hidden');
+                    if (concludeCard) concludeCard.classList.add('hidden');
+                }
+                
+                initCountdown();
+            }
+        }
+    });
+    
+    // Poll target time from Cloud every 4 seconds (for other devices)
+    setInterval(async () => {
+        if (state.activeScreen === 'countdown') {
+            const cloudTime = await loadTargetTimeFromCloud();
+            if (cloudTime) {
+                const localTime = localStorage.getItem('countdown_target_timestamp');
+                if (Number(localTime) !== cloudTime) {
+                    localStorage.setItem('countdown_target_timestamp', cloudTime);
+                    
+                    const diff = cloudTime - Date.now();
+                    if (diff > 0) {
+                        sessionStorage.removeItem('event_concluded');
+                        const mainCountdown = document.getElementById('main-countdown-card');
+                        const concludeCard = document.getElementById('conclude-card');
+                        if (mainCountdown) mainCountdown.classList.remove('hidden');
+                        if (concludeCard) concludeCard.classList.add('hidden');
+                    }
+                    
+                    initCountdown();
+                }
+            }
+        }
+    }, 4000);
     
     // Register Tab Presence
     announcePresence();
@@ -469,6 +546,9 @@ function initEventListeners() {
         // Save target time as a timestamp in localStorage so it persists across refreshes
         localStorage.setItem('countdown_target_timestamp', newTarget.getTime());
         console.log(`Setting new countdown target: ${newTarget.toISOString()} (Timestamp: ${newTarget.getTime()})`);
+        
+        // Save target time to Cloud (so other devices/browsers sync!)
+        saveTargetTimeToCloud(newTarget.getTime());
         
         // Broadcast the new countdown target to other tabs
         broadcastMessage({
