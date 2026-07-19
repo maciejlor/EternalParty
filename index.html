@@ -168,6 +168,11 @@
                         <button id="admin-btn-stop" class="btn btn-danger" disabled>⏹ Stop Stream</button>
                         <button id="admin-btn-troll" class="btn btn-accent">🤡 Troll Guests</button>
                         <button id="admin-btn-conclude" class="btn btn-danger" style="background: #990000; border-color: #990000;">🛑 Conclude Event</button>
+                        <div class="admin-time-setter" style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08); vertical-align: middle;">
+                            <span style="font-size: 0.8rem; color: #ccc;">⏰ UTC Timer:</span>
+                            <input type="time" id="admin-time-input" style="background: #000; border: 1px solid #333; color: #fff; border-radius: 4px; padding: 4px 6px; font-size: 0.85rem; width: 85px;">
+                            <button id="admin-btn-set-time" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.8rem; height: auto; min-height: 0;">Set</button>
+                        </div>
                         <span id="admin-video-status">No video uploaded</span>
                     </div>
                 </div>

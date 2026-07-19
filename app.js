@@ -69,6 +69,8 @@ const el = {
     btnStop: document.getElementById('admin-btn-stop'),
     btnTroll: document.getElementById('admin-btn-troll'),
     btnConclude: document.getElementById('admin-btn-conclude'),
+    adminTimeInput: document.getElementById('admin-time-input'),
+    btnSetTime: document.getElementById('admin-btn-set-time'),
     videoStatus: document.getElementById('admin-video-status'),
     viewersCountText: document.getElementById('viewers-count'),
     skyStars: document.getElementById('sky-stars'),
@@ -169,16 +171,25 @@ function setupStars() {
 // ==========================================================================
 let countdownInterval;
 
+function getCountdownTarget() {
+    const savedTimestamp = localStorage.getItem('countdown_target_timestamp');
+    if (savedTimestamp) {
+        return new Date(Number(savedTimestamp));
+    }
+    const defaultTarget = new Date();
+    defaultTarget.setUTCHours(19, 0, 0, 0);
+    return defaultTarget;
+}
+
 function initCountdown() {
-    // Target: exactly 19:00 UTC today
-    const target = new Date();
-    target.setUTCHours(19, 0, 0, 0);
+    clearInterval(countdownInterval);
     
     function updateTimer() {
+        const target = getCountdownTarget();
         const now = new Date();
         let diff = target.getTime() - now.getTime();
         
-        // If countdown has passed today's mark
+        // If countdown has passed target mark
         if (diff <= 0) {
             clearInterval(countdownInterval);
             el.hours.textContent = "00";
@@ -348,6 +359,14 @@ function transitionToScreen(screenName) {
         // Focus chat input on entry
         setTimeout(() => el.chatInput.focus(), 300);
         
+        // Pre-populate time input in Host Panel if Admin
+        if (state.isAdmin && el.adminTimeInput) {
+            const target = getCountdownTarget();
+            const hh = String(target.getUTCHours()).padStart(2, '0');
+            const mm = String(target.getUTCMinutes()).padStart(2, '0');
+            el.adminTimeInput.value = `${hh}:${mm}`;
+        }
+        
         // Add welcome message
         addChatMessage("System", `Welcome to the Eternal Events, ${state.username}!`, true);
         
@@ -428,6 +447,33 @@ function initEventListeners() {
         if (confirm("Are you sure you want to conclude the event? This will kick out all guests and show them the thank you screen.")) {
             concludeEvent();
         }
+    });
+    
+    el.btnSetTime.addEventListener('click', () => {
+        if (!state.isAdmin) return;
+        const timeVal = el.adminTimeInput.value;
+        if (!timeVal) {
+            showToast("Please select a valid time", "error");
+            return;
+        }
+        
+        const [hours, minutes] = timeVal.split(':').map(Number);
+        const newTarget = new Date();
+        newTarget.setUTCHours(hours, minutes, 0, 0);
+        
+        // Save target time as a timestamp in localStorage so it persists across refreshes
+        localStorage.setItem('countdown_target_timestamp', newTarget.getTime());
+        
+        // Broadcast the new countdown target to other tabs
+        broadcastMessage({
+            type: 'update_countdown',
+            timestamp: newTarget.getTime()
+        });
+        
+        // Restart/refresh local timer
+        initCountdown();
+        
+        showToast(`Countdown target set to ${timeVal} UTC`, "success");
     });
     
     // Keep Admin video element synced with local variables
@@ -971,6 +1017,11 @@ function handleSyncMessage(msg) {
             sessionStorage.removeItem('party_user_name');
             sessionStorage.removeItem('party_is_admin');
             location.reload();
+            break;
+            
+        case 'update_countdown':
+            localStorage.setItem('countdown_target_timestamp', msg.timestamp);
+            initCountdown();
             break;
     }
 }
