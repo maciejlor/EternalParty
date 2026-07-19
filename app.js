@@ -468,6 +468,7 @@ function initEventListeners() {
         
         // Save target time as a timestamp in localStorage so it persists across refreshes
         localStorage.setItem('countdown_target_timestamp', newTarget.getTime());
+        console.log(`Setting new countdown target: ${newTarget.toISOString()} (Timestamp: ${newTarget.getTime()})`);
         
         // Broadcast the new countdown target to other tabs
         broadcastMessage({
@@ -1026,6 +1027,7 @@ function handleSyncMessage(msg) {
             
         case 'update_countdown':
             localStorage.setItem('countdown_target_timestamp', msg.timestamp);
+            console.log(`Received new countdown target timestamp: ${msg.timestamp} (Date: ${new Date(Number(msg.timestamp)).toISOString()})`);
             
             // If the countdown is now set to the future, reset concluded state and return guest to countdown page
             const updatedDiff = Number(msg.timestamp) - Date.now();
