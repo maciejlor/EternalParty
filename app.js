@@ -887,12 +887,23 @@ function stopStream() {
 function sendSyncSignal() {
     if (!state.isAdmin || !state.videoLoaded) return;
     
+    // Determine if it is a local blob URL or an internet URL
+    const isBlob = el.video.src.startsWith('blob:');
+    
     broadcastMessage({
         type: 'video_sync',
+        url: isBlob ? null : el.video.src, // Do not send local blob URLs over the internet
         playing: !el.video.paused,
         currentTime: el.video.currentTime
     });
 }
+
+// Periodically send sync signal (every 3 seconds) when admin is streaming
+setInterval(() => {
+    if (state.isAdmin && state.videoLoaded) {
+        sendSyncSignal();
+    }
+}, 3000);
 
 // ==========================================================================
 // 9. Chat Mechanics & Speech Bubble Engine
@@ -1211,7 +1222,18 @@ function handleSyncMessage(msg) {
             break;
             
         case 'video_sync':
-            if (state.isAdmin || !state.videoLoaded) return;
+            if (state.isAdmin) return;
+            
+            // If the sync message has a video URL and it's not loaded locally, load it!
+            if (msg.url && (!state.videoLoaded || el.video.src !== msg.url)) {
+                el.video.src = msg.url;
+                el.video.load();
+                el.video.classList.remove('hidden');
+                el.defaultView.classList.add('hidden');
+                state.videoLoaded = true;
+            }
+            
+            if (!state.videoLoaded) return;
             
             if (msg.playing && el.video.paused) {
                 el.video.play().catch(err => console.log(err));
