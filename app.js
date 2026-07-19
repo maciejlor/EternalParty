@@ -88,7 +88,7 @@ function setupMQTTClient() {
     console.log(`Initializing MQTT client on ${broker.host}:${broker.port}${broker.path}...`);
     
     const clientId = "client_" + Math.random().toString(36).substring(2, 9);
-    mqttClient = new Paho.MQTT.Client(broker.host, broker.port, broker.path, clientId);
+    mqttClient = new Paho.Client(broker.host, broker.port, broker.path, clientId);
     
     mqttClient.onConnectionLost = (responseObject) => {
         mqttConnected = false;
@@ -1199,7 +1199,7 @@ function broadcastMessage(payload) {
     // 3. Broadcast globally to all computers over the internet via MQTT!
     if (mqttClient && mqttConnected) {
         try {
-            const message = new Paho.MQTT.Message(JSON.stringify(fullPayload));
+            const message = new Paho.Message(JSON.stringify(fullPayload));
             message.destinationName = MQTT_TOPIC;
             mqttClient.send(message);
         } catch(e) {
