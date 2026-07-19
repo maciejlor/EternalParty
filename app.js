@@ -258,7 +258,7 @@ function getCountdownTarget() {
         }
     }
     const defaultTarget = new Date();
-    defaultTarget.setUTCHours(19, 45, 0, 0);
+    defaultTarget.setUTCHours(19, 50, 0, 0);
     return defaultTarget;
 }
 
